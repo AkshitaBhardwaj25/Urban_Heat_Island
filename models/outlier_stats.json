@@ -1,0 +1,68 @@
+{
+  "temperature": {
+    "q1": 8.1,
+    "q3": 25.2,
+    "iqr": 17.1,
+    "lower_fence": -17.55,
+    "upper_fence": 50.85,
+    "n_low": 4,
+    "n_high": 0,
+    "n_capped": 4,
+    "pct": 0.09
+  },
+  "humidity": {
+    "q1": 59.0,
+    "q3": 82.0,
+    "iqr": 23.0,
+    "lower_fence": 24.5,
+    "upper_fence": 116.5,
+    "n_low": 25,
+    "n_high": 0,
+    "n_capped": 25,
+    "pct": 0.56
+  },
+  "wind_speed": {
+    "q1": 2.89,
+    "q3": 4.61,
+    "iqr": 1.72,
+    "lower_fence": 0.31,
+    "upper_fence": 7.19,
+    "n_low": 0,
+    "n_high": 145,
+    "n_capped": 145,
+    "pct": 3.22
+  },
+  "pressure": {
+    "q1": 1002.8,
+    "q3": 1014.5,
+    "iqr": 11.7,
+    "lower_fence": 985.25,
+    "upper_fence": 1032.05,
+    "n_low": 461,
+    "n_high": 15,
+    "n_capped": 476,
+    "pct": 10.58
+  },
+  "clouds": {
+    "q1": 30.0,
+    "q3": 87.0,
+    "iqr": 57.0,
+    "lower_fence": -55.5,
+    "upper_fence": 172.5,
+    "n_low": 0,
+    "n_high": 0,
+    "n_capped": 0,
+    "pct": 0.0
+  },
+  "ndvi": {
+    "q1": 0.159,
+    "q3": 0.263,
+    "iqr": 0.104,
+    "lower_fence": 0.002,
+    "upper_fence": 0.419,
+    "n_low": 0,
+    "n_high": 180,
+    "n_capped": 180,
+    "pct": 4.0
+  }
+}

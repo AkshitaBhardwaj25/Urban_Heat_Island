@@ -1,0 +1,1 @@
+["temperature", "humidity", "wind_speed", "pressure", "clouds", "ndvi", "urban_fraction", "veg_class", "lat", "lon", "distance_from_equator", "hour", "month", "is_daytime", "is_night", "temp_humidity_interaction", "wind_cooling_effect", "temp_anomaly", "heat_retention", "hour_sin", "hour_cos", "month_sin", "month_cos", "lat_abs", "lon_sin", "lon_cos", "heat_index"]
