@@ -2,8 +2,6 @@
 
 A fully automated, end-to-end machine-learning pipeline for estimating Urban Heat Island intensity from real satellite and weather data across 25 global cities.
 
-> **No synthetic or random data.** Every observation comes from Open-Meteo ERA5 reanalysis and Google Earth Engine MODIS satellite imagery. The UHI target is derived from real 8-day Land Surface Temperature composites — not a formula, not a proxy, not noise.
-
 ---
 
 ## Quick Start
@@ -17,10 +15,6 @@ pip install -r requirements.txt
 
 # 3. Run the full pipeline + launch dashboard
 python main.py
-```
-
-Dashboard opens at **http://localhost:8505**
-
 ---
 
 ## Project Structure
