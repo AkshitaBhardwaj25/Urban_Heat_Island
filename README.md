@@ -1,192 +1,249 @@
 # Urban Heat Island Estimation System
 
-A fully automated, end-to-end machine-learning pipeline for estimating Urban Heat Island intensity from real satellite and weather data across 25 global cities.
+An end-to-end Machine Learning pipeline for estimating **Urban Heat Island (UHI) intensity** using real satellite and weather data from 25 global cities.
 
 ---
 
-## Quick Start
+# Features
+
+- Automated weather + satellite data collection
+- Dynamic UHI target generation using MODIS LST
+- Feature engineering and outlier handling
+- Multiple ML model training and evaluation
+- Hyperparameter tuning with GroupKFold CV
+- Interactive Streamlit dashboard
+- Real-time UHI prediction and visualization
+
+---
+
+# Quick Start
+
+## 1. Authenticate Google Earth Engine
 
 ```bash
-# 1. Authenticate Google Earth Engine (one-time setup, opens browser)
 earthengine authenticate
+```
 
-# 2. Install dependencies
+## 2. Install Dependencies
+
+```bash
 pip install -r requirements.txt
+```
 
-# 3. Run the full pipeline + launch dashboard
+## 3. Run the Project
+
+```bash
 python main.py
+```
+
 ---
 
-## Project Structure
+# Project Structure
 
-```
-AIML PBL/
-├── main.py               # Orchestrator — run this to execute everything
-├── config.py             # All settings, API keys, city list, feature definitions
-├── logger.py             # Logging utility (console + rotating daily log file)
-├── data_collector.py     # Open-Meteo (180-day history) + GEE NDVI + GEE LST timeseries
-├── preprocessor.py       # Cleaning, IQR capping, feature engineering, dynamic UHI target
-├── model_trainer.py      # GroupKFold split, GridSearchCV tuning, MAE + baseline
-├── dashboard.py          # Streamlit 6-tab interactive dashboard (Elite Dark Edition)
-├── requirements.txt      # Python dependencies
+```text
+Urban_Heat_Island/
+│
+├── main.py                # Main pipeline runner
+├── config.py              # Configuration and API keys
+├── logger.py              # Logging utility
+├── data_collector.py      # Weather + satellite data collection
+├── preprocessor.py        # Data cleaning and feature engineering
+├── model_trainer.py       # ML model training and evaluation
+├── dashboard.py           # Streamlit dashboard
+├── requirements.txt
 │
 ├── data/
-│   ├── raw_data.csv          # ~4 500 rows (25 cities × 180 days)
-│   └── processed_data.csv    # Engineered features + city_name + uhi_intensity
+│   ├── raw_data.csv
+│   └── processed_data.csv
 │
 ├── models/
-│   ├── best_model.pkl        # Best GridSearch-tuned model (serialised)
-│   ├── scaler.pkl            # StandardScaler fitted on training features
-│   ├── metrics.json          # RMSE / MAE / R² / CV / baseline / best_params per model
-│   ├── feature_names.json    # Ordered feature list used at training time
-│   └── outlier_stats.json    # Per-column IQR fence stats from winsorisation step
+│   ├── best_model.pkl
+│   ├── scaler.pkl
+│   ├── metrics.json
+│   ├── feature_names.json
+│   └── outlier_stats.json
 │
-├── logs/                     # Daily rotating log files
-└── cache/                    # API response cache (24 h GEE, 30 d weather)
+├── cache/
+├── logs/
+└── .env
 ```
 
 ---
 
-## Pipeline Overview
+# Pipeline Overview
 
-| Step | Module | What it does | Re-runs when |
-|------|--------|-------------|--------------|
-| 1 | `data_collector.py` | Fetches 180 days of ERA5 weather per city; NDVI from GEE MOD13A2; 8-day LST timeseries from GEE MOD11A2; matches each daily row to its nearest composite | `raw_data.csv` deleted |
-| 2 | `preprocessor.py` | Cleans data; IQR winsorises outliers; engineers 26 features; computes dynamic LST-based UHI target; saves `city_name` for GroupKFold; writes `outlier_stats.json` | `processed_data.csv` deleted |
-| 3 | `model_trainer.py` | GroupShuffleSplit (city-aware); GridSearchCV with GroupKFold inner CV; RMSE + MAE + R² + skill vs baseline; saves best model | `best_model.pkl` or `metrics.json` deleted |
-| 4 | `dashboard.py` | Launches Streamlit app on port 8505 | Always runs |
-
----
-
-## Data Sources
-
-| Source | What is fetched | Cost |
-|--------|----------------|------|
-| **Open-Meteo Archive** (`archive-api.open-meteo.com`) | Daily mean temperature, humidity, max wind speed, surface pressure, cloud cover — 180 days per city (ERA5 reanalysis by ECMWF) | Free, no API key |
-| **GEE — MODIS MOD13A2** | Annual mean NDVI 2023 at city coordinates; retries at 500 m → 1 km → 2 km → 5 km for masked pixels | Free (GEE account) |
-| **GEE — MODIS MOD11A2** | Full 8-day daytime LST timeseries for the 180-day window; sampled at 1 urban + 12 rural directional reference points per city in a single server-side batch call | Free (GEE account) |
-| **OpenWeatherMap** (`api.openweathermap.org`) | Current weather — last-resort fallback only if Open-Meteo fails | Free tier |
+| Step | Description |
+|---|---|
+| Data Collection | Fetches weather and satellite data |
+| Preprocessing | Cleans data and engineers features |
+| Model Training | Trains and evaluates ML models |
+| Dashboard | Launches interactive Streamlit app |
 
 ---
 
-## UHI Target Variable (Dynamic)
+# Data Sources
 
+| Source | Data |
+|---|---|
+| Open-Meteo | Temperature, humidity, pressure, wind speed, cloud cover |
+| Google Earth Engine | NDVI and Land Surface Temperature |
+| OpenWeatherMap | Backup weather API |
+
+---
+
+# UHI Formula
+
+```text
+UHI Intensity = max(0, Urban LST − Rural LST)
 ```
-UHI intensity (°C) = max(0,  urban_LST(t)  −  rural_LST(t))
-```
 
-- **`urban_LST(t)`** — MODIS MOD11A2 8-day daytime LST at the city-centre coordinates, for the composite period closest to weather date `t` (max ±8-day gap)
-- **`rural_LST(t)`** — **Median** of the same 8-day composite sampled at **12 compass-direction offsets** (0.5° and 1.0°, i.e. ~55 km and ~110 km). MODIS automatically masks water pixels, so coastal/island cities do not pick up ocean temperatures.
-
-This makes the target **dynamic** — it varies both across cities (structural UHI) and across the 180-day window (seasonal LST fluctuation). Features and target now carry independent temporal signal, so the model actually learns.
-
-Rows where no 8-day composite falls within ±8 days (extended cloud cover) receive the **city-level median UHI** as a fallback — dataset size stays stable at ~4 500 rows.
+Where:
+- **Urban LST** = Land Surface Temperature at city center
+- **Rural LST** = Median temperature of surrounding rural regions
 
 ---
 
-## Features (26 total)
+# Features Used
 
-| Category | Features |
-|----------|---------|
-| Core weather | `temperature`, `humidity`, `wind_speed`, `pressure`, `clouds` |
-| Satellite / land | `ndvi`, `urban_fraction` (= 1 − NDVI), `veg_class` (0/1/2 categorical bins) |
-| Geographic | `lat`, `lon`, `lat_abs`, `lon_sin`, `lon_cos`, `distance_from_equator` |
-| Temporal | `hour`, `month`, `is_daytime`, `is_night`, `hour_sin`, `hour_cos`, `month_sin`, `month_cos` |
-| Derived / interaction | `temp_humidity_interaction`, `wind_cooling_effect`, `temp_anomaly`, `heat_retention`, `heat_index` |
+## Weather Features
+- Temperature
+- Humidity
+- Wind Speed
+- Pressure
+- Cloud Cover
 
-**Pre-engineering outlier capping (IQR winsorisation):** Before feature engineering, values in `temperature`, `humidity`, `wind_speed`, `pressure`, `clouds`, and `ndvi` that fall outside `[Q1 − 1.5 × IQR, Q3 + 1.5 × IQR]` are clipped to the fence values. Rows are never dropped — dataset size stays at ~4,500. Statistics saved to `models/outlier_stats.json`.
+## Satellite Features
+- NDVI
+- Urban Fraction
+- Vegetation Class
 
-**Key design decisions:**
-- `veg_class` bins NDVI into sparse / moderate / dense vegetation — reduces direct numeric NDVI-to-LST leakage while keeping the categorical signal
-- `temp_anomaly = temperature − city_mean_temperature` captures "unusually hot day for this city" independently of absolute temperature
-- `heat_retention = urban_fraction × temperature / (wind_speed + 1)` combines built-up land, ambient heat, and wind damping into one physically meaningful feature
-- `is_night` flag added because UHI dynamics differ between day and night
-- `urban_heat_proxy` (old feature = `urban_fraction × (1 − NDVI)`) permanently removed — it directly encoded the target variable (data leakage)
+## Geographic Features
+- Latitude / Longitude
+- Distance from Equator
 
----
+## Temporal Features
+- Month
+- Hour
+- Day/Night indicators
 
-## Models Trained (8–9)
-
-| Category | Models |
-|----------|--------|
-| Linear | Linear Regression, Ridge (α tuned), Lasso (α tuned) |
-| Tree | Decision Tree (depth + leaf size tuned), Random Forest (estimators + depth + leaf tuned) |
-| Boosting | Gradient Boosting, XGBoost\*, LightGBM\* — all hyperparameter tuned |
-| Distance | K-Nearest Neighbors (k + weight function tuned) |
-
-\* installed automatically if available
-
-All models except Linear Regression go through **GridSearchCV** with **GroupKFold inner cross-validation** (city-aware, `CV_FOLDS = 5`). This means hyperparameter selection itself never leaks test-city information.
+## Engineered Features
+- Heat Index
+- Heat Retention
+- Wind Cooling Effect
+- Temperature Anomaly
+- Temperature-Humidity Interaction
 
 ---
 
-## Evaluation — What Makes It Legitimate
+# Models Trained
 
-### GroupKFold train / test split
-`GroupShuffleSplit` assigns **entire cities** to either train or test. A city that appears in training **never** appears in testing. This measures real geographic generalisation — not memorisation of city-specific patterns.
+- Linear Regression
+- Ridge Regression
+- Lasso Regression
+- Decision Tree
+- Random Forest
+- Gradient Boosting
+- XGBoost
+- LightGBM
+- K-Nearest Neighbors
 
-### Metrics tracked per model
-| Metric | What it measures |
-|--------|----------------|
-| **RMSE** | Root mean squared error (°C) on held-out test cities |
-| **MAE** | Mean absolute error (°C) — more interpretable than RMSE |
-| **R²** | Variance explained on test set |
-| **CV-RMSE ± Std** | 5-fold GroupKFold cross-validation RMSE (stability check) |
-| **Skill vs Baseline** | `1 − (model_RMSE / baseline_RMSE)` — how much better than always predicting the training mean |
-
-A positive skill score means the model beats a trivial predictor. A skill ≤ 0 would mean the model is useless.
-
----
-
-## Dashboard Sections
-
-| Tab | Contents |
-|-----|---------|
-| Overview | Animated live-stats ticker · KPI cards · pipeline status · UHI histogram + violin · UHI severity reference table · global scatter map |
-| Data Explorer | Raw + processed data tables · source breakdown pie · feature box plots · time series per city · seasonal monthly chart · Pearson correlation heatmap · CSV downloads |
-| Preprocessing | Missing value chart · before/after shape comparison · IQR outlier capping summary cards + statistics table + box plots (raw vs capped) · stacked outlier bar · engineered feature grid · raw vs processed distribution comparison |
-| Models | 🥇🥈🥉 ranked leaderboard cards · RMSE / MAE / R² table · skill score bar · model radar comparison · R² vs RMSE bubble · predicted vs actual scatter · **residual analysis** (histogram + normal fit, residuals vs predicted, per-city MAE) · feature importance · GroupKFold CV error bars |
-| Heatmap | Interactive scatter / density map · UHI range filter · top-10 hottest / coolest cities · seasonal city × month heatmap |
-| Prediction | 12 input sliders · city quick-load preset · live predicted UHI with severity badge · gauge chart · radar driving factors · **scaled feature contribution bars** · sensitivity analysis · **3D response surface** (Temperature × Urban Fraction → UHI) · **city similarity finder** (feature-space nearest training city) · **mitigation insights** (evidence-based strategies) |
+Hyperparameter tuning performed using:
+- GridSearchCV
+- GroupKFold Cross Validation
 
 ---
 
-## Force Re-run Any Step
+# Evaluation Metrics
 
-Delete the output file for that step, then re-run `python main.py`:
+| Metric | Purpose |
+|---|---|
+| RMSE | Prediction error magnitude |
+| MAE | Mean absolute error |
+| R² Score | Variance explained |
+| CV-RMSE | Cross-validation stability |
+| Skill Score | Improvement over baseline |
+
+---
+
+# Dashboard Features
+
+## Overview
+- KPI cards
+- UHI distribution plots
+- Global heatmap
+
+## Data Explorer
+- Raw and processed datasets
+- Correlation heatmaps
+- Seasonal trends
+
+## Preprocessing
+- Missing value analysis
+- Outlier handling visualization
+- Feature engineering analysis
+
+## Models
+- Model leaderboard
+- Residual analysis
+- Feature importance
+- Predicted vs Actual comparison
+
+## Heatmap
+- Interactive city-wise UHI visualization
+
+## Prediction
+- Real-time UHI prediction
+- Gauge charts
+- Sensitivity analysis
+- 3D response visualization
+
+---
+
+# Re-run Any Step
+
+## Windows
 
 ```bash
-# Windows
-del data\raw_data.csv              # re-collect (clears cache too for fresh GEE calls)
-del data\processed_data.csv        # re-preprocess
-del models\best_model.pkl          # re-train
-del models\metrics.json            # re-train
-
-# macOS / Linux
-rm data/raw_data.csv
-rm data/processed_data.csv
-rm models/best_model.pkl models/metrics.json
+del data\raw_data.csv
+del data\processed_data.csv
+del models\best_model.pkl
+del models\metrics.json
 ```
 
-To also force fresh API calls (not use cached responses):
+## Clear Cache
+
 ```bash
-# Windows — delete all cache files
 del cache\cache_*.json
 ```
 
 ---
 
-## Dependencies
+# Main Dependencies
 
 | Package | Purpose |
-|---------|---------|
-| `streamlit >= 1.32` | Dashboard web framework |
-| `plotly >= 5.18` | Interactive charts (gauge, radar, choropleth, scatter) |
-| `scikit-learn >= 1.3` | ML models, GridSearchCV, GroupKFold, StandardScaler |
-| `xgboost >= 2.0` | XGBoost gradient boosting regressor |
-| `lightgbm >= 4.0` | LightGBM gradient boosting regressor |
-| `pandas >= 2.0` | DataFrames and CSV I/O |
-| `numpy >= 1.24` | Numerical operations |
-| `requests >= 2.31` | HTTP calls to Open-Meteo and OpenWeatherMap |
-| `earthengine-api >= 0.1.390` | Google Earth Engine Python client (NDVI + LST) |
-| `google-auth >= 2.0` | GEE OAuth authentication |
+|---|---|
+| Streamlit | Dashboard framework |
+| Plotly | Interactive visualizations |
+| Scikit-learn | ML models and evaluation |
+| XGBoost / LightGBM | Gradient boosting models |
+| Pandas / NumPy | Data processing |
+| Earth Engine API | Satellite data access |
+| Requests | API calls |
+
+---
+
+# Tech Stack
+
+- Python
+- Streamlit
+- Scikit-learn
+- Plotly
+- Google Earth Engine
+- XGBoost
+- LightGBM
+
+---
+
+# Author
+
+Akshita Bhardwaj
